@@ -35,11 +35,14 @@ export function getServerEnv() {
     const parsed = serverSchema.safeParse(process.env);
 
     if (!parsed.success) {
-      throw new Error(
-        `Invalid server environment variables:\n${parsed.error.errors
-          .map((err) => `${err.path.join(".")}: ${err.message}`)
-          .join("\n")}`,
-      );
+      const details = parsed.error.issues
+        .map((issue) => {
+          const path = issue.path.join(".") || "(root)";
+          return `${path}: ${issue.message}`;
+        })
+        .join("\n");
+
+      throw new Error(`Invalid server environment variables:\n${details}`);
     }
 
     serverEnv = parsed.data;
@@ -63,11 +66,14 @@ export function getClientEnv() {
     });
 
     if (!parsed.success) {
-      throw new Error(
-        `Invalid client environment variables:\n${parsed.error.errors
-          .map((err) => `${err.path.join(".")}: ${err.message}`)
-          .join("\n")}`,
-      );
+      const details = parsed.error.issues
+        .map((issue) => {
+          const path = issue.path.join(".") || "(root)";
+          return `${path}: ${issue.message}`;
+        })
+        .join("\n");
+
+      throw new Error(`Invalid client environment variables:\n${details}`);
     }
 
     clientEnv = parsed.data;

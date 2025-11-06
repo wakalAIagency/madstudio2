@@ -1,15 +1,16 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 import { getServerEnv } from "../env";
+import type { Database } from "@/types/supabase";
 
-let serviceClientSingleton:
-  | ReturnType<typeof createClient>
-  | null = null;
+type TypedSupabaseClient = SupabaseClient<Database>;
 
-export function getSupabaseServiceRoleClient() {
+let serviceClientSingleton: TypedSupabaseClient | null = null;
+
+export function getSupabaseServiceRoleClient(): TypedSupabaseClient {
   if (!serviceClientSingleton) {
     const env = getServerEnv();
-    serviceClientSingleton = createClient(
+    serviceClientSingleton = createClient<Database>(
       env.SUPABASE_URL,
       env.SUPABASE_SERVICE_ROLE_KEY,
       {
@@ -23,4 +24,3 @@ export function getSupabaseServiceRoleClient() {
 
   return serviceClientSingleton;
 }
-

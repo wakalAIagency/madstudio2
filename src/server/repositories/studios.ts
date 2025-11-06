@@ -1,21 +1,36 @@
 import { getSupabaseServiceRoleClient } from "@/lib/supabase/service-role";
 import type { Studio, StudioImage } from "@/types";
+import type { Tables } from "@/types/supabase";
+
+type StudioRow = Tables<"studios">;
+type StudioImageRow = Tables<"studio_images">;
+type StudioWithImages = StudioRow & { images: StudioImageRow[] | null };
+
+function adaptStudio(row: StudioWithImages): Studio {
+  return {
+    ...row,
+    images: row.images?.map(adaptStudioImage) ?? [],
+  } as Studio;
+}
+
+function adaptStudioImage(row: StudioImageRow): StudioImage {
+  return { ...row } as StudioImage;
+}
 
 export async function fetchStudios() {
   const supabase = getSupabaseServiceRoleClient();
   const { data, error } = await supabase
     .from("studios")
-    .select("*, images:studio_images(id, studio_id, image_url, caption, sort_order, created_at)")
+    .select(
+      "*, images:studio_images(id, studio_id, image_url, caption, sort_order, created_at)",
+    )
     .order("created_at", { ascending: true });
 
   if (error) {
     throw new Error(`Failed to load studios: ${error.message}`);
   }
 
-  return (data ?? []).map((studio) => ({
-    ...studio,
-    images: studio.images ?? [],
-  })) as Studio[];
+  return (data ?? []).map((row) => adaptStudio(row as StudioWithImages));
 }
 
 export async function createStudio(payload: {
@@ -24,31 +39,38 @@ export async function createStudio(payload: {
   description?: string | null;
 }) {
   const supabase = getSupabaseServiceRoleClient();
+  const insertPayload = {
+    name: payload.name,
+    slug: payload.slug,
+    description: payload.description ?? null,
+  };
+
   const { data, error } = await supabase
     .from("studios")
-    .insert({
-      name: payload.name,
-      slug: payload.slug,
-      description: payload.description ?? null,
-    })
-    .select("*, images:studio_images(id, studio_id, image_url, caption, sort_order, created_at)")
+    .insert(insertPayload as never)
+    .select(
+      "*, images:studio_images(id, studio_id, image_url, caption, sort_order, created_at)",
+    )
     .single();
 
   if (error) {
     throw new Error(`Failed to create studio: ${error.message}`);
   }
 
-  return {
-    ...data,
-    images: data.images ?? [],
-  } as Studio;
+  if (!data) {
+    throw new Error("Failed to create studio: empty payload");
+  }
+
+  return adaptStudio(data as StudioWithImages);
 }
 
 export async function getDefaultStudio() {
   const supabase = getSupabaseServiceRoleClient();
   const { data, error } = await supabase
     .from("studios")
-    .select("*, images:studio_images(id, studio_id, image_url, caption, sort_order, created_at)")
+    .select(
+      "*, images:studio_images(id, studio_id, image_url, caption, sort_order, created_at)",
+    )
     .order("created_at", { ascending: true })
     .limit(1)
     .maybeSingle();
@@ -58,10 +80,7 @@ export async function getDefaultStudio() {
   }
 
   if (!data) return null;
-  return {
-    ...data,
-    images: data.images ?? [],
-  } as Studio;
+  return adaptStudio(data as StudioWithImages);
 }
 
 export async function updateStudio(payload: {
@@ -71,25 +90,30 @@ export async function updateStudio(payload: {
   description?: string | null;
 }) {
   const supabase = getSupabaseServiceRoleClient();
+  const updatePayload = {
+    name: payload.name,
+    slug: payload.slug,
+    description: payload.description ?? null,
+  };
+
   const { data, error } = await supabase
     .from("studios")
-    .update({
-      name: payload.name,
-      slug: payload.slug,
-      description: payload.description ?? null,
-    })
+    .update(updatePayload as never)
     .eq("id", payload.id)
-    .select("*, images:studio_images(id, studio_id, image_url, caption, sort_order, created_at)")
+    .select(
+      "*, images:studio_images(id, studio_id, image_url, caption, sort_order, created_at)",
+    )
     .single();
 
   if (error) {
     throw new Error(`Failed to update studio: ${error.message}`);
   }
 
-  return {
-    ...data,
-    images: data.images ?? [],
-  } as Studio;
+  if (!data) {
+    throw new Error("Failed to update studio: empty payload");
+  }
+
+  return adaptStudio(data as StudioWithImages);
 }
 
 export async function deleteStudio(id: string) {
@@ -114,7 +138,7 @@ export async function upsertStudioImage(payload: {
       image_url: payload.imageUrl,
       caption: payload.caption ?? null,
       sort_order: payload.sortOrder ?? 0,
-    })
+    } as never)
     .select("*")
     .single();
 
@@ -122,7 +146,11 @@ export async function upsertStudioImage(payload: {
     throw new Error(`Failed to add studio image: ${error.message}`);
   }
 
-  return data as StudioImage;
+  if (!data) {
+    throw new Error("Failed to add studio image: empty payload");
+  }
+
+  return adaptStudioImage(data as StudioImageRow);
 }
 
 export async function deleteStudioImage(imageId: string) {

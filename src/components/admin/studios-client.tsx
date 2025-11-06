@@ -34,7 +34,10 @@ interface StudiosClientProps {
 
 export function StudiosClient({ defaultStudioId }: StudiosClientProps) {
   const studiosQuery = useStudios();
-  const studios: Studio[] = studiosQuery.data ?? [];
+  const studios: Studio[] = useMemo(
+    () => studiosQuery.data ?? [],
+    [studiosQuery.data],
+  );
   const isLoading = studiosQuery.isLoading;
   const createMutation = useCreateStudio();
   const updateMutation = useUpdateStudio();

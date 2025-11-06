@@ -15,6 +15,18 @@ import {
   bulkInsertSlots,
   fetchSlotsInRange,
 } from "@/server/repositories/slots";
+import type { Tables } from "@/types/supabase";
+
+type AvailabilityRuleRow = Tables<"availability_rules">;
+type SlotRow = Tables<"slots">;
+
+function adaptAvailabilityRule(row: AvailabilityRuleRow): AvailabilityRule {
+  return { ...row } as AvailabilityRule;
+}
+
+function adaptSlot(row: SlotRow): Slot {
+  return { ...row } as Slot;
+}
 
 interface GenerateSlotsOptions {
   start: string;
@@ -35,7 +47,7 @@ export async function listAvailabilityRules(studioId: string) {
     throw new Error(`Failed to load availability rules: ${error.message}`);
   }
 
-  return data as AvailabilityRule[];
+  return (data ?? []).map((row) => adaptAvailabilityRule(row as AvailabilityRuleRow));
 }
 
 export async function generateSlotsForRange({
@@ -159,15 +171,18 @@ export async function createManualSlot(
   const increment = durationMinutes ?? getSlotDurationMinutes();
   const end = addMinutes(parseISO(startISO), increment);
 
+  const insertPayload = {
+    start_at: formatISO(parseISO(startISO)),
+    end_at: formatISO(end),
+    status: "available",
+    created_via: "manual",
+    studio_id: studioId,
+    hold_expires_at: null,
+  };
+
   const { data, error } = await supabase
     .from("slots")
-    .insert({
-      start_at: formatISO(parseISO(startISO)),
-      end_at: formatISO(end),
-      status: "available",
-      created_via: "manual",
-      studio_id: studioId,
-    })
+    .insert(insertPayload as never)
     .select("*")
     .single();
 
@@ -175,7 +190,11 @@ export async function createManualSlot(
     throw new Error(`Failed to create slot: ${error.message}`);
   }
 
-  return data as Slot;
+  if (!data) {
+    throw new Error("Failed to create slot: empty payload");
+  }
+
+  return adaptSlot(data as SlotRow);
 }
 
 export interface UpsertAvailabilityRuleInput {
@@ -205,7 +224,7 @@ export async function createAvailabilityRule(input: UpsertAvailabilityRuleInput)
 
   const { data, error } = await supabase
     .from("availability_rules")
-    .insert(payload)
+    .insert(payload as never)
     .select("*")
     .single();
 
@@ -213,7 +232,11 @@ export async function createAvailabilityRule(input: UpsertAvailabilityRuleInput)
     throw new Error(`Failed to create rule: ${error.message}`);
   }
 
-  return data as AvailabilityRule;
+  if (!data) {
+    throw new Error("Failed to create availability rule: empty payload");
+  }
+
+  return adaptAvailabilityRule(data as AvailabilityRuleRow);
 }
 
 export async function deleteAvailabilityRule(id: string) {

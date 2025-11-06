@@ -1,6 +1,6 @@
 import { addHours } from "date-fns";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase/service-role";
-import type { Booking } from "@/types";
+import type { Booking, Slot } from "@/types";
 import { formatDateTime } from "@/lib/time";
 import {
   sendBookingDecisionEmail,
@@ -21,15 +21,22 @@ import {
   markOverlappingSlotsAsBlocked,
   updateSlotStatus,
 } from "@/server/repositories/slots";
+import type { Tables } from "@/types/supabase";
 
 const HOLD_DURATION_HOURS = 2;
+
+type SlotRow = Tables<"slots">;
+
+function adaptSlot(row: SlotRow): Slot {
+  return { ...row } as Slot;
+}
 
 export async function releaseExpiredHolds() {
   const supabase = getSupabaseServiceRoleClient();
 
   const { error } = await supabase
     .from("slots")
-    .update({ status: "available", hold_expires_at: null })
+    .update({ status: "available", hold_expires_at: null } as never)
     .eq("status", "requested")
     .lt("hold_expires_at", new Date().toISOString());
 
@@ -64,7 +71,9 @@ export async function requestBookings(payload: {
     throw new Error("Unable to fetch selected slots.");
   }
 
-  if (slots.length !== uniqueSlotIds.length) {
+  const mappedSlots = slots.map(adaptSlot);
+
+  if (mappedSlots.length !== uniqueSlotIds.length) {
     throw new Error("One or more selected slots no longer exist.");
   }
 
@@ -74,7 +83,7 @@ export async function requestBookings(payload: {
   const processed: Array<{ slotId: string; bookingId: string }> = [];
 
   try {
-    for (const slot of slots) {
+    for (const slot of mappedSlots) {
       if (!["available", "requested"].includes(slot.status)) {
         throw new Error("Some slots are no longer bookable.");
       }
@@ -103,7 +112,9 @@ export async function requestBookings(payload: {
     throw err instanceof Error ? err : new Error("Failed to create booking");
   }
 
-  const bookings = await fetchBookingsByIds(processed.map((entry) => entry.bookingId));
+  const bookings = await fetchBookingsByIds(
+    processed.map((entry) => entry.bookingId),
+  );
 
   void sendBookingRequestEmail(bookings).catch((error) =>
     console.error("Failed to send booking request email", error),
@@ -111,7 +122,7 @@ export async function requestBookings(payload: {
 
   return {
     bookings,
-    slots,
+    slots: mappedSlots,
     holdExpiresAt,
   };
 }

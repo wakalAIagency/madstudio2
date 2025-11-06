@@ -139,7 +139,6 @@ function buildCalendarAttachment(booking: Booking, timezone: string) {
     productId: "madstudio-booking",
     url: process.env.BASE_URL ? `${process.env.BASE_URL}/admin` : undefined,
     calName: "Madstudio Sessions",
-    timezone,
   });
 
   if (error || !value) {

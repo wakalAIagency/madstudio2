@@ -10,7 +10,7 @@ import { SlotCalendar } from "./slot-calendar";
 import { BookingForm } from "./booking-form";
 import { useAvailableSlots, type AvailableSlot } from "@/hooks/use-slots";
 import { useStudios } from "@/hooks/use-studios";
-import type { Studio } from "@/types";
+import type { Studio, StudioImage } from "@/types";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 
@@ -27,10 +27,25 @@ type BookingConfirmation = {
 
 export function BookingExperience({ timezone, defaultStudioId }: BookingExperienceProps) {
   const studiosQuery = useStudios();
-  const studios: Studio[] = studiosQuery.data ?? [];
+  const studios: Studio[] = useMemo(
+    () => studiosQuery.data ?? [],
+    [studiosQuery.data],
+  );
   const studiosLoading = studiosQuery.isLoading;
   const [selectedStudioId, setSelectedStudioId] = useState<string | undefined>(defaultStudioId);
-  const studioOptions = useMemo(() => studios.map((studio) => ({ id: studio.id, name: studio.name, description: studio.description })), [studios]);
+
+  type StudioOption = Pick<Studio, "id" | "name" | "description"> & { images: StudioImage[] };
+
+  const studioOptions: StudioOption[] = useMemo(
+    () =>
+      studios.map((studio) => ({
+        id: studio.id,
+        name: studio.name,
+        description: studio.description,
+        images: studio.images ?? [],
+      })),
+    [studios],
+  );
   const activeStudioId = selectedStudioId ?? studioOptions[0]?.id;
 
   const { data: slots = [], isLoading, refetch, isError } = useAvailableSlots(activeStudioId);
@@ -207,7 +222,7 @@ export function BookingExperience({ timezone, defaultStudioId }: BookingExperien
       {galleryImages.length > 0 ? (
         <section className="space-y-4">
           <h2 className="text-lg font-semibold text-foreground">
-            {selectedStudio.name} gallery
+            {selectedStudio?.name ?? "Studio"} gallery
           </h2>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {galleryImages.map((image) => (
@@ -217,7 +232,7 @@ export function BookingExperience({ timezone, defaultStudioId }: BookingExperien
               >
                   <img
                     src={image.image_url}
-                    alt={image.caption ?? `${selectedStudio.name} image`}
+                    alt={image.caption ?? `${selectedStudio?.name ?? "Studio"} image`}
                     className="h-48 w-full object-cover transition duration-300 group-hover:scale-105"
                   />
                   {image.caption ? (

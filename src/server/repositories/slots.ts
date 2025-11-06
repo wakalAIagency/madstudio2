@@ -1,6 +1,13 @@
 import { addMinutes, isBefore, parseISO } from "date-fns";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase/service-role";
 import type { Slot, SlotStatus } from "@/types";
+import type { Tables } from "@/types/supabase";
+
+type SlotRow = Tables<"slots">;
+
+function adaptSlot(row: SlotRow): Slot {
+  return { ...row } as Slot;
+}
 
 export async function fetchSlotsInRange(start: string, end: string, studioId: string) {
   const supabase = getSupabaseServiceRoleClient();
@@ -17,7 +24,7 @@ export async function fetchSlotsInRange(start: string, end: string, studioId: st
     throw new Error(`Failed to fetch slots: ${error.message}`);
   }
 
-  return data as Slot[];
+  return (data ?? []).map((row) => adaptSlot(row as SlotRow));
 }
 
 export async function fetchAvailableSlots(start: string, end: string, studioId: string) {
@@ -36,7 +43,7 @@ export async function fetchAvailableSlots(start: string, end: string, studioId: 
     throw new Error(`Failed to load available slots: ${error.message}`);
   }
 
-  return data as Slot[];
+  return (data ?? []).map((row) => adaptSlot(row as SlotRow));
 }
 
 export async function updateSlotStatus(
@@ -48,10 +55,12 @@ export async function updateSlotStatus(
 
   const { data, error } = await supabase
     .from("slots")
-    .update({
-      status,
-      hold_expires_at: holdExpiresAt ?? null,
-    })
+    .update(
+      {
+        status,
+        hold_expires_at: holdExpiresAt ?? null,
+      } as never,
+    )
     .eq("id", slotId)
     .select("*")
     .single();
@@ -60,7 +69,11 @@ export async function updateSlotStatus(
     throw new Error(`Failed to update slot status: ${error.message}`);
   }
 
-  return data as Slot;
+  if (!data) {
+    throw new Error("Slot update returned no data");
+  }
+
+  return adaptSlot(data as SlotRow);
 }
 
 export async function bulkInsertSlots(slots: Array<Omit<Slot, "id">>) {
@@ -74,7 +87,7 @@ export async function bulkInsertSlots(slots: Array<Omit<Slot, "id">>) {
 
   const { data, error } = await supabase
     .from("slots")
-    .upsert(preparedPayload, {
+    .upsert(preparedPayload as never, {
       onConflict: "studio_id,start_at,end_at",
       ignoreDuplicates: true,
     })
@@ -88,7 +101,7 @@ export async function bulkInsertSlots(slots: Array<Omit<Slot, "id">>) {
     return [];
   }
 
-  return data as Slot[];
+  return data.map((row) => adaptSlot(row as SlotRow));
 }
 
 export async function markOverlappingSlotsAsBlocked(
@@ -101,7 +114,7 @@ export async function markOverlappingSlotsAsBlocked(
 
   let query = supabase
     .from("slots")
-    .update({ status: "blocked" })
+    .update({ status: "blocked" } as never)
     .or(
       `and(start_at.lt.${end},end_at.gt.${start})`,
     )

@@ -3,6 +3,7 @@ import Credentials from "next-auth/providers/credentials";
 import { compare } from "bcryptjs";
 
 import { getSupabaseServiceRoleClient } from "@/lib/supabase/service-role";
+import type { Tables } from "@/types/supabase";
 
 interface SupabaseUser {
   id: string;
@@ -43,19 +44,24 @@ export const authOptions: NextAuthOptions = {
           return null;
         }
 
-        const isValid = await compare(credentials.password, data.password_hash);
+        const user = data as Tables<"users">;
+
+        const isValid = await compare(
+          credentials.password,
+          user.password_hash,
+        );
         if (!isValid) {
           return null;
         }
 
-        if (data.role !== "admin") {
+        if (user.role !== "admin") {
           return null;
         }
 
         return {
-          id: data.id,
-          email: data.email,
-          role: data.role,
+          id: user.id,
+          email: user.email,
+          role: user.role,
         } satisfies Omit<SupabaseUser, "password_hash">;
       },
     }),

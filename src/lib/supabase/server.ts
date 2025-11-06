@@ -1,8 +1,9 @@
-import { createServerClient } from "@supabase/ssr";
-import { cookies, headers } from "next/headers";
-import type { CookieOptions } from "@supabase/ssr";
+import { createServerClient, type CookieOptions } from "@supabase/ssr";
+import { cookies } from "next/headers";
 
 import { getServerEnv } from "../env";
+import type { Database } from "@/types/supabase";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 const cookieOptions: CookieOptions = {
   domain: undefined,
@@ -12,12 +13,13 @@ const cookieOptions: CookieOptions = {
   secure: true,
 };
 
-export function createSupabaseServerClient() {
+export async function createSupabaseServerClient(): Promise<
+  SupabaseClient<Database>
+> {
   const env = getServerEnv();
-  const cookieStore = cookies();
-  const headerStore = headers();
+  const cookieStore = await cookies();
 
-  return createServerClient(
+  return createServerClient<Database>(
     env.SUPABASE_URL,
     env.SUPABASE_ANON_KEY,
     {
@@ -26,29 +28,27 @@ export function createSupabaseServerClient() {
           return cookieStore.get(name)?.value;
         },
         set(name: string, value: string, options: CookieOptions) {
-          cookieStore.set({
-            name,
-            value,
-            ...cookieOptions,
-            ...options,
-          });
+          if ("set" in cookieStore && typeof cookieStore.set === "function") {
+            cookieStore.set({
+              name,
+              value,
+              ...cookieOptions,
+              ...options,
+            });
+          }
         },
         remove(name: string, options: CookieOptions) {
-          cookieStore.set({
-            name,
-            value: "",
-            ...cookieOptions,
-            ...options,
-            maxAge: 0,
-          });
-        },
-      },
-      headers: {
-        get(key: string) {
-          return headerStore.get(key) ?? undefined;
+          if ("set" in cookieStore && typeof cookieStore.set === "function") {
+            cookieStore.set({
+              name,
+              value: "",
+              ...cookieOptions,
+              ...options,
+              maxAge: 0,
+            });
+          }
         },
       },
     },
   );
 }
-

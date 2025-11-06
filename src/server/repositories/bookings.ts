@@ -1,5 +1,24 @@
 import { getSupabaseServiceRoleClient } from "@/lib/supabase/service-role";
-import type { Booking, BookingStatus } from "@/types";
+import type { Booking, BookingStatus, Slot } from "@/types";
+import type { Tables } from "@/types/supabase";
+
+type BookingRow = Tables<"bookings">;
+type SlotRow = Tables<"slots">;
+type BookingWithSlot = BookingRow & { slot: SlotRow | null };
+
+const bookingWithSlotColumns =
+  "*, slot:slots(id, start_at, end_at, status, hold_expires_at, studio_id)";
+
+function adaptBooking(row: BookingWithSlot): Booking {
+  return {
+    ...row,
+    slot: row.slot ? ({ ...row.slot } as Slot) : undefined,
+  } as Booking;
+}
+
+function adaptBookingRow(row: BookingRow): Booking {
+  return { ...row } as Booking;
+}
 
 export async function createBooking(payload: {
   slot_id: string;
@@ -9,27 +28,26 @@ export async function createBooking(payload: {
   notes?: string;
 }) {
   const supabase = getSupabaseServiceRoleClient();
+  const insertPayload = {
+    slot_id: payload.slot_id,
+    visitor_name: payload.visitor_name,
+    visitor_email: payload.visitor_email,
+    visitor_phone: payload.visitor_phone,
+    notes: payload.notes ?? null,
+    status: "pending",
+  };
 
   const { data, error } = await supabase
     .from("bookings")
-    .insert({
-      slot_id: payload.slot_id,
-      visitor_name: payload.visitor_name,
-      visitor_email: payload.visitor_email,
-      visitor_phone: payload.visitor_phone,
-      notes: payload.notes ?? null,
-      status: "pending",
-    })
-    .select(
-      "*, slot:slots(id, start_at, end_at, status, hold_expires_at, studio_id)",
-    )
+    .insert(insertPayload as never)
+    .select(bookingWithSlotColumns)
     .single();
 
-  if (error) {
-    throw new Error(`Failed to create booking: ${error.message}`);
+  if (error || !data) {
+    throw new Error(`Failed to create booking: ${error?.message ?? "unknown"}`);
   }
 
-  return data as Booking;
+  return adaptBooking(data as BookingWithSlot);
 }
 
 export async function updateBookingStatus(
@@ -40,42 +58,38 @@ export async function updateBookingStatus(
 
   const { data, error } = await supabase
     .from("bookings")
-    .update({ status })
+    .update({ status } as never)
     .eq("id", bookingId)
-    .select(
-      "*, slot:slots(id, start_at, end_at, status, hold_expires_at, studio_id)",
-    )
+    .select(bookingWithSlotColumns)
     .single();
 
-  if (error) {
-    throw new Error(`Failed to update booking: ${error.message}`);
+  if (error || !data) {
+    throw new Error(`Failed to update booking: ${error?.message ?? "unknown"}`);
   }
 
-  return data as Booking;
+  return adaptBooking(data as BookingWithSlot);
 }
 
 export async function fetchBookingById(bookingId: string) {
   const supabase = getSupabaseServiceRoleClient();
   const { data, error } = await supabase
     .from("bookings")
-    .select(
-      "*, slot:slots(id, start_at, end_at, status, hold_expires_at, studio_id)",
-    )
+    .select(bookingWithSlotColumns)
     .eq("id", bookingId)
     .single();
 
-  if (error) {
-    throw new Error(`Failed to load booking: ${error.message}`);
+  if (error || !data) {
+    throw new Error(`Failed to load booking: ${error?.message ?? "unknown"}`);
   }
 
-  return data as Booking;
+  return adaptBooking(data as BookingWithSlot);
 }
 
 export async function fetchPendingBookings(studioId?: string) {
   const supabase = getSupabaseServiceRoleClient();
   const selectClause = studioId
-    ? "*, slot:slots!inner(id, start_at, end_at, status, hold_expires_at, studio_id)"
-    : "*, slot:slots(id, start_at, end_at, status, hold_expires_at, studio_id)";
+    ? bookingWithSlotColumns.replace("slot:slots", "slot:slots!inner")
+    : bookingWithSlotColumns;
 
   let query = supabase
     .from("bookings")
@@ -89,11 +103,13 @@ export async function fetchPendingBookings(studioId?: string) {
 
   const { data, error } = await query;
 
-  if (error) {
-    throw new Error(`Failed to load pending bookings: ${error.message}`);
+  if (error || !data) {
+    throw new Error(
+      `Failed to load pending bookings: ${error?.message ?? "unknown"}`,
+    );
   }
 
-  return data as Booking[];
+  return data.map((row) => adaptBooking(row as BookingWithSlot));
 }
 
 export async function fetchBookingsBySlot(slotId: string) {
@@ -107,7 +123,7 @@ export async function fetchBookingsBySlot(slotId: string) {
     throw new Error(`Failed to fetch bookings for slot: ${error.message}`);
   }
 
-  return (data ?? []) as Booking[];
+  return (data ?? []).map((row) => adaptBookingRow(row as BookingRow));
 }
 
 export async function fetchBookingsByIds(ids: string[]) {
@@ -116,25 +132,26 @@ export async function fetchBookingsByIds(ids: string[]) {
   const supabase = getSupabaseServiceRoleClient();
   const { data, error } = await supabase
     .from("bookings")
-    .select(
-      "*, slot:slots(id, start_at, end_at, status, hold_expires_at, studio_id)",
-    )
+    .select(bookingWithSlotColumns)
     .in("id", ids)
     .order("created_at", { ascending: true });
 
-  if (error) {
-    throw new Error(`Failed to fetch bookings: ${error.message}`);
+  if (error || !data) {
+    throw new Error(`Failed to fetch bookings: ${error?.message ?? "unknown"}`);
   }
 
-  return data as Booking[];
+  return data.map((row) => adaptBooking(row as BookingWithSlot));
 }
 
-export async function declineBookingsForSlot(slotId: string, excludeBookingId?: string) {
+export async function declineBookingsForSlot(
+  slotId: string,
+  excludeBookingId?: string,
+) {
   const supabase = getSupabaseServiceRoleClient();
 
   let query = supabase
     .from("bookings")
-    .update({ status: "declined" })
+    .update({ status: "declined" } as never)
     .eq("slot_id", slotId)
     .eq("status", "pending");
 
@@ -166,8 +183,8 @@ export async function getAdminOverviewStats(studioId?: string) {
       }
       return query;
     })(),
-    supabase.rpc("count_bookings_today", { studio: studioId ?? null }),
-    supabase.rpc("count_bookings_this_week", { studio: studioId ?? null }),
+    supabase.rpc("count_bookings_today", { studio: studioId ?? null } as never),
+    supabase.rpc("count_bookings_this_week", { studio: studioId ?? null } as never),
   ]);
 
   if (pending.error) {
