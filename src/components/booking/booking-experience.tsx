@@ -1,7 +1,7 @@
 /* eslint-disable @next/next/no-img-element */
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { formatInTimeZone } from "date-fns-tz";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -25,6 +25,10 @@ type BookingConfirmation = {
   slots: AvailableSlot[];
 };
 
+type StudioOption = Pick<Studio, "id" | "name" | "description"> & {
+  images: StudioImage[];
+};
+
 export function BookingExperience({ timezone, defaultStudioId }: BookingExperienceProps) {
   const studiosQuery = useStudios();
   const studios: Studio[] = useMemo(
@@ -33,8 +37,6 @@ export function BookingExperience({ timezone, defaultStudioId }: BookingExperien
   );
   const studiosLoading = studiosQuery.isLoading;
   const [selectedStudioId, setSelectedStudioId] = useState<string | undefined>(defaultStudioId);
-
-  type StudioOption = Pick<Studio, "id" | "name" | "description"> & { images: StudioImage[] };
 
   const studioOptions: StudioOption[] = useMemo(
     () =>
@@ -92,6 +94,10 @@ export function BookingExperience({ timezone, defaultStudioId }: BookingExperien
 
   return (
     <div className="grid gap-12">
+      {selectedStudio && galleryImages.length > 0 ? (
+        <StudioHeroGallery studio={selectedStudio} images={galleryImages} />
+      ) : null}
+
       <div className="grid gap-8 lg:grid-cols-[1.2fr,0.8fr]">
         <Card className="border-none bg-surface shadow-lg">
         <CardHeader className="flex flex-row items-center justify-between">
@@ -218,33 +224,6 @@ export function BookingExperience({ timezone, defaultStudioId }: BookingExperien
           </Card>
         </div>
       </div>
-
-      {galleryImages.length > 0 ? (
-        <section className="space-y-4">
-          <h2 className="text-lg font-semibold text-foreground">
-            {selectedStudio?.name ?? "Studio"} gallery
-          </h2>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {galleryImages.map((image) => (
-              <div
-                key={image.id}
-                className="group relative overflow-hidden rounded-2xl border border-border/40 bg-surface-alt shadow-lg shadow-[var(--surface-glow)]"
-              >
-                  <img
-                    src={image.image_url}
-                    alt={image.caption ?? `${selectedStudio?.name ?? "Studio"} image`}
-                    className="h-48 w-full object-cover transition duration-300 group-hover:scale-105"
-                  />
-                  {image.caption ? (
-                    <div className="absolute inset-x-0 bottom-0 bg-background/60 px-3 py-2 text-xs text-muted-foreground backdrop-blur">
-                      {image.caption}
-                    </div>
-                  ) : null}
-                </div>
-              ))}
-          </div>
-        </section>
-      ) : null}
     </div>
   );
 }
@@ -314,5 +293,92 @@ function ConfirmationSummary({
       </div>
       <Button variant="outline" onClick={() => onBookAnother()}>Book another session</Button>
     </div>
+  );
+}
+
+function StudioHeroGallery({
+  studio,
+  images,
+}: {
+  studio: StudioOption;
+  images: StudioImage[];
+}) {
+  const [activeIndex, setActiveIndex] = useState(0);
+
+  useEffect(() => {
+    setActiveIndex(0);
+  }, [studio.id]);
+
+  const featuredImage = images[activeIndex];
+  const previewImages = images.slice(0, 6);
+
+  return (
+    <section className="space-y-4">
+      <div className="rounded-[32px] border border-white/5 bg-gradient-to-br from-[#050505] via-[#0c1117] to-[#050505] p-6 text-white shadow-[0_25px_80px_-40px_rgba(0,0,0,0.8)]">
+        <div className="grid gap-6 lg:grid-cols-[1.6fr,0.8fr]">
+          <div className="relative overflow-hidden rounded-[28px] border border-white/10 bg-black/40">
+            <img
+              src={featuredImage.image_url}
+              alt={featuredImage.caption ?? `${studio.name} highlight`}
+              className="h-full w-full object-cover"
+            />
+            <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/80 via-black/0" />
+            <div className="absolute inset-x-0 bottom-0 p-6">
+              <p className="text-sm uppercase tracking-[0.6em] text-white/60">
+                {studio.name}
+              </p>
+              <h2 className="mt-2 text-2xl font-semibold">
+                {featuredImage.caption ?? "Signature look"}
+              </h2>
+              {studio.description ? (
+                <p className="mt-1 max-w-md text-sm text-white/70">
+                  {studio.description}
+                </p>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-4 rounded-[24px] bg-white/5 p-5 backdrop-blur">
+            <div>
+              <p className="text-xs uppercase tracking-[0.45em] text-white/60">
+                Studio preview
+              </p>
+              <p className="text-base font-medium text-white/90">
+                swipe through the vibe
+              </p>
+            </div>
+            <div className="flex gap-3 overflow-x-auto pb-1">
+              {previewImages.map((image, index) => (
+                <button
+                  key={image.id}
+                  type="button"
+                  onClick={() => setActiveIndex(index)}
+                  className={`relative h-24 w-32 flex-shrink-0 overflow-hidden rounded-2xl border transition ${
+                    index === activeIndex
+                      ? "border-[#29ff6d] shadow-[0_0_25px_rgba(41,255,109,0.35)]"
+                      : "border-white/10 opacity-70 hover:opacity-100"
+                  }`}
+                >
+                  <img
+                    src={image.image_url}
+                    alt={image.caption ?? `${studio.name} preview`}
+                    className="h-full w-full object-cover"
+                  />
+                  {image.caption ? (
+                    <span className="absolute inset-x-0 bottom-0 bg-black/60 px-2 py-1 text-[0.65rem] text-white/80 line-clamp-1">
+                      {image.caption}
+                    </span>
+                  ) : null}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-2 text-xs text-white/60">
+              <span className="h-1.5 w-1.5 rounded-full bg-[#29ff6d]" />
+              {images.length > 1 ? `${images.length} curated angles` : "1 curated angle"}
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
   );
 }
